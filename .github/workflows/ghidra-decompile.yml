@@ -1,0 +1,60 @@
+name: ghidra-decompile
+
+on:
+  workflow_dispatch:
+
+jobs:
+  decompile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare libgtav.so
+        run: |
+          mkdir -p work out
+          if [ -f input/libgtav.so.xz ]; then
+            xz -dc input/libgtav.so.xz > work/libgtav.so
+          elif [ -f input/libgtav.so ]; then
+            cp input/libgtav.so work/libgtav.so
+          else
+            Z=$(ls input/*.zip 2>/dev/null | head -1)
+            [ -n "$Z" ] || { echo "input/ te libgtav.so.xz / libgtav.so / apks.zip dao"; exit 1; }
+            unzip -p "$Z" 'lib/arm64-v8a/libgtav.so' > work/libgtav.so
+          fi
+          ls -la work/libgtav.so
+          file work/libgtav.so || true
+
+      - name: Download Ghidra 11.3.2
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          URL=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            https://api.github.com/repos/NationalSecurityAgency/ghidra/releases/tags/Ghidra_11.3.2_build \
+            | jq -r '.assets[] | select(.name|endswith(".zip")) | .browser_download_url' | head -1)
+          echo "Ghidra url: $URL"
+          curl -L -o ghidra.zip "$URL"
+          unzip -q ghidra.zip -d gh
+          ls gh
+
+      - name: Run Ghidra headless (full analysis + extract)
+        run: |
+          GH=$(ls -d gh/ghidra_*)
+          sed -i 's/^MAXMEM=.*/MAXMEM=12G/' "$GH/support/launch.properties" || true
+          grep -q '^MAXMEM=' "$GH/support/launch.properties" || echo 'MAXMEM=12G' >> "$GH/support/launch.properties"
+          "$GH/support/analyzeHeadless" "$PWD/gproj" libgtav \
+            -import work/libgtav.so \
+            -scriptPath "$PWD/ghidra_scripts" \
+            -postScript ExtractBlipInfo.java "$PWD/out/decomp.txt" \
+            -deleteProject 2>&1 | tee out/ghidra.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: decomp
+          path: out/
