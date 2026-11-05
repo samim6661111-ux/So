@@ -17,7 +17,7 @@ jobs:
 
       - name: Prepare libgtav.so
         run: |
-          mkdir -p work out
+          mkdir -p work out gproj
           if [ -f libgtav.so.xz ]; then
             xz -dc libgtav.so.xz > work/libgtav.so
           elif [ -f input/libgtav.so.xz ]; then
@@ -41,12 +41,13 @@ jobs:
 
       - name: Run Ghidra headless
         run: |
+          mkdir -p gproj out
           GH=$(ls -d gh/ghidra_*)
           sed -i 's/^MAXMEM=.*/MAXMEM=12G/' "$GH/support/launch.properties" || true
           grep -q '^MAXMEM=' "$GH/support/launch.properties" || echo 'MAXMEM=12G' >> "$GH/support/launch.properties"
           "$GH/support/analyzeHeadless" "$PWD/gproj" libgtav \
             -import work/libgtav.so \
-            -scriptPath "$PWD;$PWD/ghidra_scripts" \
+            -scriptPath "$PWD" \
             -postScript ExtractBlipInfo.java "$PWD/out/decomp.txt" \
             -deleteProject 2>&1 | tee out/ghidra.log
 
