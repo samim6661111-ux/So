@@ -18,17 +18,14 @@ jobs:
       - name: Prepare libgtav.so
         run: |
           mkdir -p work out
-          if [ -f input/libgtav.so.xz ]; then
+          if [ -f libgtav.so.xz ]; then
+            xz -dc libgtav.so.xz > work/libgtav.so
+          elif [ -f input/libgtav.so.xz ]; then
             xz -dc input/libgtav.so.xz > work/libgtav.so
-          elif [ -f input/libgtav.so ]; then
-            cp input/libgtav.so work/libgtav.so
           else
-            Z=$(ls input/*.zip 2>/dev/null | head -1)
-            [ -n "$Z" ] || { echo "input/ te libgtav.so.xz / libgtav.so / apks.zip dao"; exit 1; }
-            unzip -p "$Z" 'lib/arm64-v8a/libgtav.so' > work/libgtav.so
+            echo "libgtav.so.xz paoa jayni"; ls -la; exit 1
           fi
           ls -la work/libgtav.so
-          file work/libgtav.so || true
 
       - name: Download Ghidra 11.3.2
         env:
@@ -42,14 +39,14 @@ jobs:
           unzip -q ghidra.zip -d gh
           ls gh
 
-      - name: Run Ghidra headless (full analysis + extract)
+      - name: Run Ghidra headless
         run: |
           GH=$(ls -d gh/ghidra_*)
           sed -i 's/^MAXMEM=.*/MAXMEM=12G/' "$GH/support/launch.properties" || true
           grep -q '^MAXMEM=' "$GH/support/launch.properties" || echo 'MAXMEM=12G' >> "$GH/support/launch.properties"
           "$GH/support/analyzeHeadless" "$PWD/gproj" libgtav \
             -import work/libgtav.so \
-            -scriptPath "$PWD/ghidra_scripts" \
+            -scriptPath "$PWD;$PWD/ghidra_scripts" \
             -postScript ExtractBlipInfo.java "$PWD/out/decomp.txt" \
             -deleteProject 2>&1 | tee out/ghidra.log
 
